@@ -5,7 +5,7 @@
 ---
 
 Esta é uma lista de gravação Chinesa criada por **Dorayakito/Xiao Pingguo (小苹果)**. Ela é baseada nos fonemas mais proeminentes do **普通话/现代标准汉语** (Putonghua/Mandarim Padrão Moderno).
-
+Exemplo de voicebank usando ela: <audio controls src="https://raw.githubusercontent.com/dorayakito/Reclist-POMAR-ZH/main/exemplo.mp3"></audio>
 > [!NOTE]
 > Esta lista faz parte do projeto **POMAR LTS**.
 > 
