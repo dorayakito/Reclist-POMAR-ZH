@@ -7,7 +7,7 @@ using OpenUtau.Core.Ustx;
 namespace OpenUtau.Plugin.Builtin
 {
 
-    [Phonemizer("Mandarin CVVC", "ZH CVVC", "Dorayakito", language: "ZH")]
+    [Phonemizer("Mandarin CVVC", "ZH CVVC", "xiao", language: "ZH")]
     public class MandarinCVVCPhonemizer : Phonemizer
     {
 
@@ -77,6 +77,7 @@ namespace OpenUtau.Plugin.Builtin
                 var (initial, final) = ParsePinyin(lyric);
 
                 var phonemes = new List<string>();
+                bool hasVC = false;
 
                 if (prevNeighbour.HasValue)
                 {
@@ -89,6 +90,7 @@ namespace OpenUtau.Plugin.Builtin
                         if (!string.IsNullOrEmpty(vc))
                         {
                             phonemes.Add(vc);
+                            hasVC = true;
                         }
                     }
                 }
@@ -104,7 +106,8 @@ namespace OpenUtau.Plugin.Builtin
                     }
                 }
 
-                return BuildResult(phonemes, totalDuration, tone);
+                int prevDuration = prevNeighbour.HasValue ? prevNeighbour.Value.duration : 0;
+                return BuildResult(phonemes, totalDuration, prevDuration, hasVC, tone);
             }
 
             return SinglePhoneme(lyric);
@@ -170,7 +173,7 @@ namespace OpenUtau.Plugin.Builtin
             };
         }
 
-        private Result BuildResult(List<string> aliases, int totalDuration, int tone)
+        private Result BuildResult(List<string> aliases, int totalDuration, int prevDuration, bool hasVC, int tone)
         {
             if (aliases.Count == 0)
             {
@@ -192,24 +195,41 @@ namespace OpenUtau.Plugin.Builtin
 
             var phonemes = new List<Phoneme>();
 
-            int vcLength = Math.Min(300, totalDuration * 50 / 100);
-            int endingLength = Math.Min(180, totalDuration * 25 / 100);
+            int vcLength = 0;
+            if (hasVC)
+            {
+                double currentBpm = bpm > 0 ? bpm : 120.0;
+                double msPerTick = 60000.0 / (currentBpm * 480.0);
+                int fixedVcTicks = (int)(80.0 / msPerTick);
+                vcLength = fixedVcTicks;
+                if (prevDuration > 0)
+                    vcLength = Math.Min(vcLength, prevDuration * 4 / 5);
+            }
+
+            double bpmForEnding = bpm > 0 ? bpm : 120.0;
+            int endingLength = (int)(80.0 / (60000.0 / (bpmForEnding * 480.0)));
+
+
+            int vcIndex = 0;
 
             for (int i = 0; i < aliases.Count; i++)
             {
                 string alias = aliases[i];
                 int position;
 
-                if (i == 0)
+                if (hasVC && i == vcIndex)
                 {
+                
                     position = -vcLength;
                 }
                 else if (i == aliases.Count - 1 && alias.EndsWith("-"))
                 {
+                   
                     position = totalDuration - endingLength;
                 }
                 else
                 {
+                 
                     position = 0;
                 }
 
