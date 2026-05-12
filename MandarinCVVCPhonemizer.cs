@@ -7,7 +7,7 @@ using OpenUtau.Core.Ustx;
 namespace OpenUtau.Plugin.Builtin
 {
 
-    [Phonemizer("Mandarin CVVC", "ZH CVVC", "xiao", language: "ZH")]
+    [Phonemizer("Mandarin CVVC", "ZH CVVC", "Dorayakito", language: "ZH")]
     public class MandarinCVVCPhonemizer : Phonemizer
     {
 
@@ -84,9 +84,9 @@ namespace OpenUtau.Plugin.Builtin
                     var prevLyric = prevNeighbour.Value.lyric.Trim().ToLowerInvariant();
                     var (_, prevFinal) = ParsePinyin(prevLyric);
 
-                    if (!string.IsNullOrEmpty(prevFinal) && !string.IsNullOrEmpty(initial))
+                    if (!string.IsNullOrEmpty(prevFinal))
                     {
-                        string vc = FindBestVC(prevFinal, initial, tone);
+                        string vc = FindBestVC(prevFinal, initial, lyric, tone);
                         if (!string.IsNullOrEmpty(vc))
                         {
                             phonemes.Add(vc);
@@ -140,24 +140,40 @@ namespace OpenUtau.Plugin.Builtin
             return ("", pinyin);
         }
 
-        private string FindBestVC(string final, string initial, int tone)
+        private string FindBestVC(string final, string initial, string lyric, int tone)
         {
-            string vc = $"{final} {initial}";
-            if (HasAlias(vc, tone))
+            string vcv = $"{final} {lyric}";
+            if (HasAlias(vcv, tone))
             {
-                return vc;
+                return vcv;
             }
 
-            if (vcFallbacks.TryGetValue(initial, out var fallbacks))
+            if (!string.IsNullOrEmpty(initial))
             {
-                foreach (var fallback in fallbacks)
+                string vc = $"{final} {initial}";
+                if (HasAlias(vc, tone))
                 {
-                    string vcFallback = $"{final} {fallback}";
-                    if (HasAlias(vcFallback, tone))
+                    return vc;
+                }
+
+                if (vcFallbacks.TryGetValue(initial, out var fallbacks))
+                {
+                    foreach (var fallback in fallbacks)
                     {
-                        return vcFallback;
+                        string vcFallback = $"{final} {fallback}";
+                        if (HasAlias(vcFallback, tone))
+                        {
+                            return vcFallback;
+                        }
                     }
                 }
+            }
+
+            // Last-resort fallback: use "{final} -" if no VC transition exists
+            string dashFallback = $"{final} -";
+            if (HasAlias(dashFallback, tone))
+            {
+                return dashFallback;
             }
 
             return "";
@@ -195,22 +211,24 @@ namespace OpenUtau.Plugin.Builtin
 
             var phonemes = new List<Phoneme>();
 
+            // Use a fixed time-based VC overlap for large, consistent transitions.
+            // Only cap at previous note's duration to avoid going past its start.
             int vcLength = 0;
             if (hasVC)
             {
                 double currentBpm = bpm > 0 ? bpm : 120.0;
-                double msPerTick = 60000.0 / (currentBpm * 480.0);
-                int fixedVcTicks = (int)(80.0 / msPerTick);
+                double msPerTick = 60000.0 / (currentBpm * 240.0);
+                int fixedVcTicks = (int)(160.0 / msPerTick); // 160ms worth of ticks
                 vcLength = fixedVcTicks;
                 if (prevDuration > 0)
                     vcLength = Math.Min(vcLength, prevDuration * 4 / 5);
             }
 
             double bpmForEnding = bpm > 0 ? bpm : 120.0;
-            int endingLength = (int)(80.0 / (60000.0 / (bpmForEnding * 480.0)));
+            int endingLength = (int)(90.0 / (60000.0 / (bpmForEnding * 480.0))); // 90ms for endings
 
 
-            int vcIndex = 0;
+            int vcIndex = 0; // index of the first real VC phoneme (always 0 when hasVC=true)
 
             for (int i = 0; i < aliases.Count; i++)
             {
@@ -219,17 +237,17 @@ namespace OpenUtau.Plugin.Builtin
 
                 if (hasVC && i == vcIndex)
                 {
-                
+                    // VC phoneme: placed before note start (negative = overlap into previous note)
                     position = -vcLength;
                 }
                 else if (i == aliases.Count - 1 && alias.EndsWith("-"))
                 {
-                   
+                    // Ending phoneme (e.g. "ian -"): placed near end of note
                     position = totalDuration - endingLength;
                 }
                 else
                 {
-                 
+                    // CV phoneme: at note start
                     position = 0;
                 }
 
